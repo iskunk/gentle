@@ -126,6 +126,75 @@ class Transcription:
             w.writerow(row)
         return buf.getvalue()
 
+    def to_textgrid(self):
+        '''Return a TextGrid representation of the aligned transcript,
+        for use with Praat (http://www.fon.hum.uva.nl/praat/). Details at
+        http://www.fon.hum.uva.nl/praat/manual/TextGrid_file_formats.html
+        '''
+        def interval(i, xmin, xmax, text):
+            return \
+                "\t\t\tintervals [{i:d}]:\n".format(i=i) + \
+                "\t\t\t\txmin = {t:.06f}\n".format(t=xmin) + \
+                "\t\t\t\txmax = {t:.06f}\n".format(t=xmax) + \
+                "\t\t\t\ttext = \"{w:s}\"\n".format(w=text)
+        if not self.words:
+            return ''
+        pbuf = ''
+        wbuf = ''
+        phone_count = 0
+        word_count = 0
+        t_end = 0.0
+        for X in self.words:
+            if X.case != Word.SUCCESS:
+                continue
+            if X.start > t_end + 0.001:
+                # insert silence intervals
+                word_count += 1
+                wbuf += interval(word_count, t_end, X.start, '')
+                phone_count += 1
+                pbuf += interval(phone_count, t_end, X.start, 'sil')
+            word_count += 1
+            wbuf += interval(word_count, X.start, X.end, X.alignedWord)
+            if X.end > t_end:
+                t_end = X.end
+            t_phone = X.start
+            for Y in X.phones:
+                phone_count += 1
+                t0 = t_phone
+                t_phone += Y['duration']
+                phone = Y['phone']
+                if phone.endswith(('_S', '_B', '_I', '_E')):
+                    phone = phone[:-2].upper()
+                pbuf += interval(phone_count, t0, t_phone, phone)
+        buf = ''
+        xmin = "xmin = {t:.06f}\n".format(t=0.0)
+        xmax = "xmax = {t:.06f}\n".format(t=t_end)
+        # header
+        buf += "File type = \"ooTextFile\"\n"
+        buf += "Object class = \"TextGrid\"\n\n"
+        buf += xmin
+        buf += xmax
+        buf += "tiers? <exists>\n"
+        buf += "size = 2\n"
+        buf += "item []:\n"
+        # phone intervals
+        buf += "\titem [1]:\n"
+        buf += "\t\tclass = \"IntervalTier\"\n"
+        buf += "\t\tname = \"phones\"\n"
+        buf += "\t\t" + xmin
+        buf += "\t\t" + xmax
+        buf += "\t\tintervals: size = {n:d}\n".format(n=phone_count)
+        buf += pbuf
+        # word intervals
+        buf += "\titem [2]:\n"
+        buf += "\t\tclass = \"IntervalTier\"\n"
+        buf += "\t\tname = \"words\"\n"
+        buf += "\t\t" + xmin
+        buf += "\t\t" + xmax
+        buf += "\t\tintervals: size = {n:d}\n".format(n=word_count)
+        buf += wbuf
+        return buf
+
     def stats(self):
         counts = defaultdict(int)
         for word in self.words:

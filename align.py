@@ -7,10 +7,14 @@ import sys
 import gentle
 
 parser = argparse.ArgumentParser(
-        description='Align a transcript to audio by generating a new language model.  Outputs JSON')
+        description='Align a transcript to audio by generating a new language model.  Outputs JSON or TextGrid')
 parser.add_argument(
         '--nthreads', default=multiprocessing.cpu_count(), type=int,
         help='number of alignment threads')
+parser.add_argument(
+        '-f', '--format', metavar='format', type=str,
+        choices=['json', 'textgrid'], default='json',
+        help='desired output format (json, textgrid)')
 parser.add_argument(
         '-o', '--output', metavar='output', type=str, 
         help='output filename')
@@ -55,6 +59,9 @@ with gentle.resampled(args.audiofile) as wavfile:
     result = aligner.transcribe(wavfile, progress_cb=on_progress, logging=logging)
 
 fh = open(args.output, 'w', encoding="utf-8") if args.output else sys.stdout
-fh.write(result.to_json(indent=2))
+if args.format == 'json':
+    fh.write(result.to_json(indent=2))
+if args.format == 'textgrid':
+    fh.write(result.to_textgrid())
 if args.output:
     logging.info("output written to %s" % (args.output))
